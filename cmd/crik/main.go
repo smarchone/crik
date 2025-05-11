@@ -98,11 +98,11 @@ func (r *Run) Run() error {
 	fmt.Printf("Command started with PID %d\n", cmd.Process.Pid)
 	if cfg.ImageDir != "" {
 		fmt.Printf("Setting up SIGTERM handler to take checkpoint in %s\n", cfg.ImageDir)
-		signal.Notify(signalChan, syscall.SIGTERM)
+		signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGKILL)
 		sig := <-signalChan
 		switch sig {
-		case syscall.SIGTERM:
-			fmt.Println("Received SIGTERM.")
+		case syscall.SIGTERM, syscall.SIGKILL:
+			fmt.Printf("Received %s.\n", sig.String())
 			// Take checkpoint only if the node is in shutting down state or the node state server is not given.
 			if cfg.NodeStateServerURL != "" {
 				nodeName := os.Getenv("KUBERNETES_NODE_NAME")

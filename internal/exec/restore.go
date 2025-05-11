@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -96,13 +97,35 @@ func RestoreWithCmd(imageDir string) error {
 		return err
 	}
 
-	// Re-checkpoint after restore
-	fmt.Println("Restoration successful. Taking a new checkpoint.")
-	c := criu.MakeCriu()
-	if _, err := TakeCheckpoint(c, os.Getpid(), conf.Configuration); err != nil {
-		return fmt.Errorf("failed to re-checkpoint after restore: %w", err)
+	// Fork-exec the child process
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start restore process: %w", err)
 	}
-	fmt.Println("Re-checkpoint completed successfully.")
+
+	fmt.Printf("Restore process started with PID %d\n", cmd.Process.Pid)
+
+	// Re-register SIGTERM handler in the child process
+	go func() error {
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, syscall.SIGTERM)
+		for sig := range signalChan {
+			fmt.Printf("Child process received signal: %s\n", sig)
+			// Handle cleanup or re-checkpoint logic here
+
+			// Re-checkpoint after restore
+			fmt.Println("Restoration successful. Taking a new checkpoint.")
+			c := criu.MakeCriu()
+			if _, err := TakeCheckpoint(c, os.Getpid(), conf.Configuration); err != nil {
+				return fmt.Errorf("failed to re-checkpoint after restore: %w", err)
+			}
+			fmt.Println("Re-checkpoint completed successfully.")
+			return nil
+		}
+		return nil
+	}()
+
+	// Wait for the child process to complete
+	cmd.Wait()
 
 	return nil
 }
