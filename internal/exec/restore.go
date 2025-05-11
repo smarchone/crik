@@ -21,9 +21,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sigs.k8s.io/yaml"
 	"strings"
 	"syscall"
+
+	"github.com/checkpoint-restore/go-criu/v7"
+	"sigs.k8s.io/yaml"
 )
 
 func RestoreWithCmd(imageDir string) error {
@@ -90,5 +92,17 @@ func RestoreWithCmd(imageDir string) error {
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Re-checkpoint after restore
+	fmt.Println("Restoration successful. Taking a new checkpoint.")
+	c := criu.MakeCriu()
+	if _, err := TakeCheckpoint(c, os.Getpid(), conf.Configuration); err != nil {
+		return fmt.Errorf("failed to re-checkpoint after restore: %w", err)
+	}
+	fmt.Println("Re-checkpoint completed successfully.")
+
+	return nil
 }
